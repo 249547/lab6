@@ -1,0 +1,89 @@
+const API_URL = "https://jsonplaceholder.typicode.com/users";
+
+
+function isValidUser(user) {
+  return (
+    user !== null &&
+    typeof user === "object" &&
+    typeof user.id === "number" &&
+    typeof user.name === "string" && user.name.trim() !== "" &&
+    typeof user.email === "string" && user.email.includes("@")
+  );
+}
+
+async function fetchUser(id) {
+  let response;
+  try {
+    response = await fetch(`${API_URL}/${id}`);
+  } catch (networkError) {
+    // network down, DNS failure, etc.
+    throw new Error(`Network error while fetching user ${id}: ${networkError.message}`);
+  }
+
+  if (!response.ok) {
+    // e.g. 404 for a user that does not exist
+    throw new Error(`Failed to fetch user ${id}: HTTP ${response.status}`);
+  }
+
+  const user = await response.json();
+
+  if (!isValidUser(user)) {
+    throw new Error(`User ${id} returned invalid data`);
+  }
+
+  return user;
+}
+
+
+function fetchBothUsers(idA, idB) {
+  // The "main promise": a promise that wraps Promise.all
+  return new Promise((resolve, reject) => {
+    Promise.all([fetchUser(idA), fetchUser(idB)])
+      .then(([userA, userB]) => {
+        // Both operations resolved; double-check both results are valid
+        if (isValidUser(userA) && isValidUser(userB)) {
+          resolve({ userA, userB });          // accept
+        } else {
+          reject(new Error("One or both users have invalid details"));
+        }
+      })
+      .catch((err) => {
+        // If either operation failed, Promise.all rejects immediately
+        reject(err);                           // reject
+      });
+  });
+}
+
+
+async function main() {
+  console.log("=== Task 1: fetchUser ===");
+
+  try {
+    const user = await fetchUser(1);
+    console.log("Success:", user.id, user.name, user.email);
+  } catch (err) {
+    console.error("Error:", err.message);
+  }
+
+  try {
+    await fetchUser(9999); // does not exist -> 404 -> error
+  } catch (err) {
+    console.error("Expected error:", err.message);
+  }
+
+  console.log("\n=== Task 2: Promise.all ===");
+
+  // Both valid -> main promise accepted
+  fetchBothUsers(1, 2)
+    .then(({ userA, userB }) =>
+      console.log("Accepted:", userA.name, "&", userB.name)
+    )
+    .catch((err) => console.error("Rejected:", err.message));
+
+  // One invalid -> main promise rejected
+  fetchBothUsers(1, 9999)
+    .then(() => console.log("Accepted"))
+    .catch((err) => console.error("Rejected (expected):", err.message));
+}
+
+main();
